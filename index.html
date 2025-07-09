@@ -3,14 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบเซ็นชื่อเข้าร่วมประชุม - Firebase Edition</title>
-    <meta name="description" content="ระบบบันทึกการรับทราบเอกสารและลายเซ็นออนไลน์">
-    <meta name="keywords" content="meeting, attendance, signature, firebase, digital signature">
-    <meta name="author" content="Claude AI">
+    <title>ระบบเซ็นชื่อเข้าร่วมประชุม</title>
     
-    <!-- Firebase -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+    <!-- Firebase v9 modular SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, collection, doc, setDoc, getDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        
+        // ⚠️ ใส่ Firebase Configuration ของคุณที่นี่
+        const firebaseConfig = {
+            apiKey: "AIzaSyDYAMY9XLsVk7rNed65aMQ_nesJ7JePkYY",
+            authDomain: "meeting-attendance-app-f79aa.firebaseapp.com",
+            projectId: "meeting-attendance-app-f79aa",
+            storageBucket: "meeting-attendance-app-f79aa.firebasestorage.app",
+            messagingSenderId: "1:574418048067:web:2fd27ee136c6f05b3e70f6",
+            appId: "your-app-id"
+        };
+
+        // Initialize Firebase
+        let db;
+        let isFirebaseInitialized = false;
+        
+        try {
+            // ตรวจสอบ config
+            if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "your-api-key-here") {
+                throw new Error('กรุณาใส่ Firebase Configuration ใน index.html');
+            }
+            
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            isFirebaseInitialized = true;
+            
+            console.log('✅ Firebase initialized successfully');
+            updateStatus('online', '🟢 เชื่อมต่อ Firebase สำเร็จ');
+            
+        } catch (error) {
+            console.error('❌ Firebase initialization error:', error);
+            isFirebaseInitialized = false;
+            updateStatus('offline', `🔴 Firebase Error: ${error.message}`);
+        }
+        
+        // Make functions available globally
+        window.db = db;
+        window.isFirebaseInitialized = isFirebaseInitialized;
+        window.setDoc = setDoc;
+        window.getDoc = getDoc;
+        window.doc = doc;
+        window.collection = collection;
+        window.serverTimestamp = serverTimestamp;
+        
+    </script>
     
     <!-- jsPDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -138,12 +180,6 @@
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 25px;
-        }
-        
-        .form-row-3 {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
             gap: 25px;
         }
         
@@ -537,7 +573,7 @@
                 padding: 20px;
             }
             
-            .form-row, .form-row-3 {
+            .form-row {
                 grid-template-columns: 1fr;
             }
             
@@ -718,30 +754,6 @@
     </div>
 
     <script>
-        // ⚠️ Firebase Configuration - ใส่ค่า config ของคุณที่นี่
-        const firebaseConfig = {
-            apiKey: "AIzaSyDYAMY9XLsVk7rNed65aMQ_nesJ7JePkYY",
-            authDomain: "meeting-attendance-app-f79aa.firebaseapp.com",
-            projectId: "meeting-attendance-app-f79aa",
-            storageBucket: "meeting-attendance-app-f79aa.firebasestorage.app",
-            messagingSenderId: "574418048067",
-            appId: "1:574418048067:web:2fd27ee136c6f05b3e70f6"
-        };
-
-        // Initialize Firebase
-        let db;
-        let isFirebaseInitialized = false;
-        
-        try {
-            const app = firebase.initializeApp(firebaseConfig);
-            db = firebase.firestore();
-            isFirebaseInitialized = true;
-            updateStatus('online', '🟢 เชื่อมต่อ Firebase สำเร็จ');
-        } catch (error) {
-            console.error('Firebase initialization error:', error);
-            updateStatus('offline', '🔴 ไม่สามารถเชื่อมต่อ Firebase');
-        }
-
         // Global variables
         let isAdminMode = false;
         let participants = [
@@ -777,10 +789,13 @@
             }
         }
 
-        // Firebase operations
+        // Firebase operations using v9 modular SDK
         async function saveToFirebase() {
-            if (!isFirebaseInitialized) {
+            if (!window.isFirebaseInitialized) {
                 updateStatus('offline', '🔴 Firebase ไม่พร้อมใช้งาน');
+                
+                // Fallback to localStorage
+                saveToLocalStorage();
                 return;
             }
 
@@ -802,65 +817,72 @@
                         other: document.getElementById('other').checked
                     },
                     participants: participantData,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    lastUpdated: window.serverTimestamp(),
                     updatedBy: isAdminMode ? 'admin' : 'user'
                 };
 
-                await db.collection('meeting_documents').doc(DOCUMENT_ID).set(formData, { merge: true });
+                const docRef = window.doc(window.db, 'meeting_documents', DOCUMENT_ID);
+                await window.setDoc(docRef, formData, { merge: true });
+                
                 updateStatus('online', '✅ บันทึกสำเร็จ');
                 
                 // Also save to localStorage as backup
-                try {
-                    const backupData = { ...formData };
-                    backupData.lastUpdated = new Date().toISOString();
-                    localStorage.setItem('meetingAttendanceBackup', JSON.stringify(backupData));
-                } catch (e) {
-                    console.log('LocalStorage backup failed:', e);
-                }
+                saveToLocalStorage();
                 
             } catch (error) {
                 console.error('Error saving to Firebase:', error);
                 updateStatus('offline', '❌ บันทึกไม่สำเร็จ');
                 
                 // Fallback to localStorage
-                try {
-                    const backupData = {
-                        documentInfo: {
-                            requestDate: document.getElementById('requestDate').value,
-                            dueDate: document.getElementById('dueDate').value,
-                            documentName: document.getElementById('documentName').value,
-                            documentType: document.getElementById('documentType').value,
-                            documentNumber: document.getElementById('documentNumber').value,
-                            version: document.getElementById('version').value,
-                            effectiveDate: document.getElementById('effectiveDate').value,
-                            hardCopy: document.getElementById('hardCopy').checked,
-                            softCopy: document.getElementById('softCopy').checked,
-                            edms: document.getElementById('edms').checked,
-                            other: document.getElementById('other').checked
-                        },
-                        participants: participantData,
-                        lastUpdated: new Date().toISOString(),
-                        updatedBy: isAdminMode ? 'admin' : 'user'
-                    };
-                    localStorage.setItem('meetingAttendanceBackup', JSON.stringify(backupData));
-                    updateStatus('warning', '⚠️ บันทึกใน Local เท่านั้น');
-                } catch (e) {
-                    updateStatus('offline', '❌ บันทึกไม่สำเร็จ');
+                saveToLocalStorage();
+            }
+        }
+
+        // LocalStorage backup functions
+        function saveToLocalStorage() {
+            try {
+                const backupData = {
+                    documentInfo: {
+                        requestDate: document.getElementById('requestDate').value,
+                        dueDate: document.getElementById('dueDate').value,
+                        documentName: document.getElementById('documentName').value,
+                        documentType: document.getElementById('documentType').value,
+                        documentNumber: document.getElementById('documentNumber').value,
+                        version: document.getElementById('version').value,
+                        effectiveDate: document.getElementById('effectiveDate').value,
+                        hardCopy: document.getElementById('hardCopy').checked,
+                        softCopy: document.getElementById('softCopy').checked,
+                        edms: document.getElementById('edms').checked,
+                        other: document.getElementById('other').checked
+                    },
+                    participants: participantData,
+                    lastUpdated: new Date().toISOString(),
+                    updatedBy: isAdminMode ? 'admin' : 'user'
+                };
+                
+                localStorage.setItem('meetingAttendanceBackup', JSON.stringify(backupData));
+                
+                if (!window.isFirebaseInitialized) {
+                    updateStatus('warning', '⚠️ บันทึกใน Local Storage');
                 }
+                
+            } catch (e) {
+                updateStatus('offline', '❌ ไม่สามารถบันทึกได้');
             }
         }
 
         async function loadFromFirebase() {
-            if (!isFirebaseInitialized) {
+            if (!window.isFirebaseInitialized) {
                 loadFromLocalStorage();
                 return;
             }
 
             try {
-                const doc = await db.collection('meeting_documents').doc(DOCUMENT_ID).get();
+                const docRef = window.doc(window.db, 'meeting_documents', DOCUMENT_ID);
+                const docSnap = await window.getDoc(docRef);
                 
-                if (doc.exists) {
-                    const data = doc.data();
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
                     
                     // Load document info
                     if (data.documentInfo) {
@@ -981,9 +1003,7 @@
 
         // Auto-save function
         async function autoSave() {
-            if (isFirebaseInitialized) {
-                await saveToFirebase();
-            }
+            await saveToFirebase();
         }
 
         // Auto-save every 30 seconds
@@ -1294,8 +1314,13 @@
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize participants first
             initializeParticipants();
-            loadFromFirebase();
+            
+            // Load data after a short delay to ensure Firebase is initialized
+            setTimeout(() => {
+                loadFromFirebase();
+            }, 1000);
             
             // Modal event listeners
             document.getElementById('adminPassword').addEventListener('keypress', function(e) {
@@ -1323,7 +1348,7 @@
             // Check online status
             window.addEventListener('online', () => {
                 updateStatus('online', '🟢 เชื่อมต่ออินเทอร์เน็ต');
-                if (isFirebaseInitialized) {
+                if (window.isFirebaseInitialized) {
                     loadFromFirebase();
                 }
             });
