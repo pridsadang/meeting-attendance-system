@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบเซ็นชื่อเข้าร่วมประชุม - Firebase Edition</title>
+    <meta name="description" content="ระบบบันทึกการรับทราบเอกสารและลายเซ็นออนไลน์">
+    <meta name="keywords" content="meeting, attendance, signature, firebase, digital signature">
+    <meta name="author" content="Claude AI">
+    
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+    
+    <!-- jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Sarabun', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+            backdrop-filter: blur(10px);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            position: relative;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 2px;
+        }
+        
+        .header h1 {
+            color: #2d3748;
+            margin: 20px 0 15px 0;
+            font-size: clamp(24px, 4vw, 36px);
+            font-weight: 700;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .header h2 {
+            color: #4a5568;
+            margin: 0;
+            font-size: clamp(16px, 2.5vw, 20px);
+            font-weight: 400;
+            opacity: 0.8;
+        }
+        
+        .form-section {
+            margin-bottom: 40px;
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+        }
+        
+        .form-section h3 {
+            color: #2d3748;
+            margin-bottom: 25px;
+            font-size: 22px;
+            font-weight: 600;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 16px;
+        }
+        
+        .form-group input, 
+        .form-group select {
+            width: 100%;
+            padding: 14px 18px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.9);
+            font-family: inherit;
+        }
+        
+        .form-group input:focus, 
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+            transform: translateY(-1px);
+        }
+        
+        .form-group input:disabled, 
+        .form-group select:disabled {
+            background-color: #f7fafc;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+        }
+        
+        .form-row-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 25px;
+        }
+        
+        .participants-section {
+            margin-top: 30px;
+        }
+        
+        .participant-row {
+            display: grid;
+            grid-template-columns: 60px 2fr 1.2fr 1.2fr 1fr 100px;
+            gap: 15px;
+            align-items: center;
+            padding: 20px;
+            border: 1px solid #e2e8f0;
+            border-radius: 15px;
+            margin-bottom: 15px;
+            background: rgba(255, 255, 255, 0.95);
+            transition: all 0.3s ease;
+        }
+        
+        .participant-row:hover {
+            background: rgba(255, 255, 255, 1);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+            transform: translateY(-2px);
+        }
+        
+        .participant-header {
+            display: grid;
+            grid-template-columns: 60px 2fr 1.2fr 1.2fr 1fr 100px;
+            gap: 15px;
+            align-items: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #2d3748, #4a5568);
+            color: white;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .participant-input {
+            padding: 12px 14px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+        
+        .participant-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .signature-canvas {
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            cursor: crosshair;
+            background-color: white;
+            transition: all 0.3s ease;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        .signature-canvas:hover {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+            font-family: inherit;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .btn:hover::before {
+            left: 100%;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #48bb78, #38a169);
+            color: white;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #f56565, #e53e3e);
+            color: white;
+        }
+        
+        .btn-warning {
+            background: linear-gradient(135deg, #ed8936, #dd6b20);
+            color: white;
+        }
+        
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 12px;
+        }
+        
+        .admin-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: linear-gradient(135deg, #9f7aea, #805ad5);
+            border: none;
+            border-radius: 50px;
+            padding: 15px 25px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(159, 122, 234, 0.3);
+        }
+        
+        .admin-toggle:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(159, 122, 234, 0.4);
+        }
+        
+        .admin-mode {
+            background: linear-gradient(135deg, #48bb78, #38a169) !important;
+            box-shadow: 0 4px 15px rgba(72, 187, 120, 0.3) !important;
+        }
+        
+        .status-bar {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 1000;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 14px;
+            display: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .status-bar.online {
+            background: linear-gradient(135deg, #48bb78, #38a169);
+            color: white;
+        }
+        
+        .status-bar.offline {
+            background: linear-gradient(135deg, #f56565, #e53e3e);
+            color: white;
+        }
+        
+        .status-bar.saving {
+            background: linear-gradient(135deg, #ed8936, #dd6b20);
+            color: white;
+        }
+        
+        .today-btn {
+            margin-left: 12px;
+            padding: 10px 18px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .today-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.6);
+            backdrop-filter: blur(8px);
+        }
+        
+        .modal-content {
+            background: white;
+            margin: 10% auto;
+            padding: 40px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.3);
+            animation: modalSlideIn 0.3s ease;
+        }
+        
+        @keyframes modalSlideIn {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        .modal h3 {
+            color: #2d3748;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+        
+        .modal input {
+            width: 100%;
+            padding: 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 16px;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .modal input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+        }
+        
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+        
+        .error-message {
+            color: #f56565;
+            font-size: 14px;
+            margin-top: 10px;
+            display: none;
+            padding: 10px;
+            background-color: #fed7d7;
+            border-radius: 8px;
+            border: 1px solid #feb2b2;
+        }
+        
+        .checkbox-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .checkbox-item:hover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+            transform: translateY(-1px);
+        }
+        
+        .checkbox-item input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+            transform: scale(1.2);
+        }
+        
+        .checkbox-item label {
+            margin: 0;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 40px;
+        }
+        
+        .loading {
+            opacity: 0.7;
+            pointer-events: none;
+            position: relative;
+        }
+        
+        .loading::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 24px;
+            height: 24px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .signature-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .participant-name {
+            font-weight: 500;
+            color: #2d3748;
+        }
+        
+        .participant-index {
+            font-weight: 600;
+            color: #4a5568;
+            background: #f7fafc;
+            padding: 8px 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            .participant-row, .participant-header {
+                grid-template-columns: 50px 1.5fr 1fr 1fr 1fr 80px;
+                gap: 10px;
+            }
+            
+            .signature-canvas {
+                width: 120px;
+                height: 50px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .container {
+                padding: 20px;
+            }
+            
+            .form-row, .form-row-3 {
+                grid-template-columns: 1fr;
+            }
+            
+            .participant-row, .participant-header {
+                grid-template-columns: 1fr;
+                text-align: center;
+                gap: 15px;
+            }
+            
+            .participant-row > div {
+                margin-bottom: 10px;
+            }
+            
+            .action-buttons {
+                grid-template-columns: 1fr;
+            }
+            
+            .admin-toggle {
+                top: 10px;
+                right: 10px;
+                padding: 12px 20px;
+                font-size: 12px;
+            }
+            
+            .status-bar {
+                top: 60px;
+                right: 10px;
+                font-size: 12px;
+                padding: 8px 15px;
+            }
+            
+            .signature-canvas {
+                width: 150px;
+                height: 60px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .header h1 {
+                font-size: 20px;
+            }
+            
+            .header h2 {
+                font-size: 14px;
+            }
+            
+            .form-section {
+                padding: 20px;
+            }
+            
+            .form-group input, .form-group select {
+                padding: 12px 15px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="statusBar" class="status-bar">
+        <span id="statusText">🔄 เชื่อมต่อ...</span>
+    </div>
+    
+    <button class="admin-toggle" onclick="showPasswordModal()">
+        <span id="adminToggleText">🔓 User Mode</span>
+    </button>
+    
+    <!-- Password Modal -->
+    <div id="passwordModal" class="modal">
+        <div class="modal-content">
+            <h3>🔒 เข้าสู่ Admin Mode</h3>
+            <input type="password" id="adminPassword" placeholder="กรุณาใส่รหัสผ่าน" maxlength="50">
+            <div class="error-message" id="errorMessage">รหัสผ่านไม่ถูกต้อง</div>
+            <div class="modal-buttons">
+                <button class="btn btn-success" onclick="checkPassword()">ยืนยัน</button>
+                <button class="btn btn-danger" onclick="closePasswordModal()">ยกเลิก</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="header">
+            <h1>ใบรับทราบเนื้อหาเอกสาร</h1>
+            <h2>Document Acknowledgement and Implementation</h2>
+        </div>
+
+        <div class="form-section">
+            <h3>📋 ข้อมูลเอกสาร</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>📅 วันที่ขอดำเนินการ:</label>
+                    <input type="date" id="requestDate" disabled>
+                    <button class="today-btn" onclick="setToday('requestDate')">วันนี้</button>
+                </div>
+                <div class="form-group">
+                    <label>⏰ กำหนดเสร็จ:</label>
+                    <input type="date" id="dueDate" disabled>
+                    <button class="today-btn" onclick="setToday('dueDate')">วันนี้</button>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>📄 ชื่อเอกสาร:</label>
+                <input type="text" id="documentName" placeholder="รายงานการประชุม MU Monthly ประจาเดือนกุมภาพันธ์" disabled>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>🏷️ ประเภทเอกสาร:</label>
+                    <select id="documentType" disabled>
+                        <option value="internal">เอกสารภายใน</option>
+                        <option value="external">เอกสารภายนอก</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>🔢 หมายเลขเอกสาร:</label>
+                    <input type="text" id="documentNumber" placeholder="ALL-SQP-FM-041" disabled>
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>📋 ฉบับที่:</label>
+                    <input type="text" id="version" placeholder="E" disabled>
+                </div>
+                <div class="form-group">
+                    <label>📅 วันที่มีผลบังคับใช้:</label>
+                    <input type="date" id="effectiveDate" disabled>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>📁 รูปแบบเอกสาร:</label>
+                <div class="checkbox-group">
+                    <div class="checkbox-item" onclick="toggleCheckbox('hardCopy')">
+                        <input type="checkbox" id="hardCopy" disabled>
+                        <label for="hardCopy">📄 Hard Copy</label>
+                    </div>
+                    <div class="checkbox-item" onclick="toggleCheckbox('softCopy')">
+                        <input type="checkbox" id="softCopy" disabled>
+                        <label for="softCopy">💾 Soft Copy</label>
+                    </div>
+                    <div class="checkbox-item" onclick="toggleCheckbox('edms')">
+                        <input type="checkbox" id="edms" disabled>
+                        <label for="edms">🌐 EDMS</label>
+                    </div>
+                    <div class="checkbox-item" onclick="toggleCheckbox('other')">
+                        <input type="checkbox" id="other" disabled>
+                        <label for="other">📋 อื่น ๆ</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="participants-section">
+            <h3>👥 รายชื่อผู้รับทราบเอกสาร</h3>
+            <div class="participant-header">
+                <div>ลำดับ</div>
+                <div>ชื่อ - นามสกุล</div>
+                <div>รับทราบผ่าน</div>
+                <div>ลายเซ็น</div>
+                <div>วันที่ลงนาม</div>
+                <div>จัดการ</div>
+            </div>
+            
+            <div id="participantsList">
+                <!-- จะถูกสร้างโดย JavaScript -->
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <button class="btn btn-primary" onclick="saveToFirebase()">
+                💾 บันทึกข้อมูล
+            </button>
+            <button class="btn btn-success" onclick="exportToPDF()">
+                📄 Export เป็น PDF
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // ⚠️ Firebase Configuration - ใส่ค่า config ของคุณที่นี่
+        const firebaseConfig = {
+            apiKey: "AIzaSyDYAMY9XLsVk7rNed65aMQ_nesJ7JePkYY",
+            authDomain: "meeting-attendance-app-f79aa.firebaseapp.com",
+            projectId: "meeting-attendance-app-f79aa",
+            storageBucket: "meeting-attendance-app-f79aa.firebasestorage.app",
+            messagingSenderId: "574418048067",
+            appId: "1:574418048067:web:2fd27ee136c6f05b3e70f6"
+        };
+
+        // Initialize Firebase
+        let db;
+        let isFirebaseInitialized = false;
+        
+        try {
+            const app = firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+            isFirebaseInitialized = true;
+            updateStatus('online', '🟢 เชื่อมต่อ Firebase สำเร็จ');
+        } catch (error) {
+            console.error('Firebase initialization error:', error);
+            updateStatus('offline', '🔴 ไม่สามารถเชื่อมต่อ Firebase');
+        }
+
+        // Global variables
+        let isAdminMode = false;
+        let participants = [
+            'นายศักดิ์ไชย ไชยปัญญา', 'นายศิริพงศ์ คงวิเศษ', 'นายปราโมทย์ เหมะธุลิน',
+            'นายวิศักดิ์ เทอดไทย', 'นายวรวุฒิ ณรงค์ฤทธิ์', 'นายศิริศักดิ์ ฝาชัยภูมิ',
+            'นายนพกิจ ดีขุน', 'นายธิติวัฒน์ ลือนาม', 'นายพฤหัส สุโรจน์โภคิน',
+            'นายลิขิต ศิริกุล', 'นายชัยวัฒน์ ม้าอินทร์', 'นายทรงวุฒิ มรดก',
+            'นายพีรวัส ผดุงศักดิ์', 'นายชัยณรงค์ จงใจรักษ์', 'นายนพดล สิงห์เจริญ',
+            'นายไพฑูรย์ ผ่องบุรุษ', 'นายทศพล แก้ววรรณา', 'นายณัฐวุฒิ เลิศภูเขียว',
+            'นายมงคล พานทอง', 'นายอนุกิตต์ เหล่าวาณิชวัฒนา', 'นายทรงวุฒิ พันธุนิบาตร',
+            'นางสาวรวีชนก แสงทอง', 'นายภาณุมาศ ไชยโคตร', 'นางสาวไอศวรรย์ ศรีนาง',
+            'นายณัฐวุฒิ แดงช่วง', 'นายชยพัทธ์ วชิรรุจิโรจน์', 'นายอนุศาสตร์ ฟูสุวรรณ',
+            'นายเอกพล น้อยมา', 'นายจักรพงษ์ หงษ์เวียงจันทร์'
+        ];
+
+        let participantData = {};
+        const ADMIN_PASSWORD = 'P@ssw0rd2024';
+        const DOCUMENT_ID = 'meeting_document_' + new Date().getFullYear();
+
+        // Status management
+        function updateStatus(type, message) {
+            const statusBar = document.getElementById('statusBar');
+            const statusText = document.getElementById('statusText');
+            
+            statusBar.className = `status-bar ${type}`;
+            statusText.textContent = message;
+            statusBar.style.display = 'block';
+            
+            if (type === 'online' || type === 'offline') {
+                setTimeout(() => {
+                    statusBar.style.display = 'none';
+                }, 3000);
+            }
+        }
+
+        // Firebase operations
+        async function saveToFirebase() {
+            if (!isFirebaseInitialized) {
+                updateStatus('offline', '🔴 Firebase ไม่พร้อมใช้งาน');
+                return;
+            }
+
+            updateStatus('saving', '💾 กำลังบันทึก...');
+            
+            try {
+                const formData = {
+                    documentInfo: {
+                        requestDate: document.getElementById('requestDate').value,
+                        dueDate: document.getElementById('dueDate').value,
+                        documentName: document.getElementById('documentName').value,
+                        documentType: document.getElementById('documentType').value,
+                        documentNumber: document.getElementById('documentNumber').value,
+                        version: document.getElementById('version').value,
+                        effectiveDate: document.getElementById('effectiveDate').value,
+                        hardCopy: document.getElementById('hardCopy').checked,
+                        softCopy: document.getElementById('softCopy').checked,
+                        edms: document.getElementById('edms').checked,
+                        other: document.getElementById('other').checked
+                    },
+                    participants: participantData,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: isAdminMode ? 'admin' : 'user'
+                };
+
+                await db.collection('meeting_documents').doc(DOCUMENT_ID).set(formData, { merge: true });
+                updateStatus('online', '✅ บันทึกสำเร็จ');
+                
+                // Also save to localStorage as backup
+                try {
+                    const backupData = { ...formData };
+                    backupData.lastUpdated = new Date().toISOString();
+                    localStorage.setItem('meetingAttendanceBackup', JSON.stringify(backupData));
+                } catch (e) {
+                    console.log('LocalStorage backup failed:', e);
+                }
+                
+            } catch (error) {
+                console.error('Error saving to Firebase:', error);
+                updateStatus('offline', '❌ บันทึกไม่สำเร็จ');
+                
+                // Fallback to localStorage
+                try {
+                    const backupData = {
+                        documentInfo: {
+                            requestDate: document.getElementById('requestDate').value,
+                            dueDate: document.getElementById('dueDate').value,
+                            documentName: document.getElementById('documentName').value,
+                            documentType: document.getElementById('documentType').value,
+                            documentNumber: document.getElementById('documentNumber').value,
+                            version: document.getElementById('version').value,
+                            effectiveDate: document.getElementById('effectiveDate').value,
+                            hardCopy: document.getElementById('hardCopy').checked,
+                            softCopy: document.getElementById('softCopy').checked,
+                            edms: document.getElementById('edms').checked,
+                            other: document.getElementById('other').checked
+                        },
+                        participants: participantData,
+                        lastUpdated: new Date().toISOString(),
+                        updatedBy: isAdminMode ? 'admin' : 'user'
+                    };
+                    localStorage.setItem('meetingAttendanceBackup', JSON.stringify(backupData));
+                    updateStatus('warning', '⚠️ บันทึกใน Local เท่านั้น');
+                } catch (e) {
+                    updateStatus('offline', '❌ บันทึกไม่สำเร็จ');
+                }
+            }
+        }
+
+        async function loadFromFirebase() {
+            if (!isFirebaseInitialized) {
+                loadFromLocalStorage();
+                return;
+            }
+
+            try {
+                const doc = await db.collection('meeting_documents').doc(DOCUMENT_ID).get();
+                
+                if (doc.exists) {
+                    const data = doc.data();
+                    
+                    // Load document info
+                    if (data.documentInfo) {
+                        document.getElementById('requestDate').value = data.documentInfo.requestDate || '';
+                        document.getElementById('dueDate').value = data.documentInfo.dueDate || '';
+                        document.getElementById('documentName').value = data.documentInfo.documentName || '';
+                        document.getElementById('documentType').value = data.documentInfo.documentType || 'internal';
+                        document.getElementById('documentNumber').value = data.documentInfo.documentNumber || '';
+                        document.getElementById('version').value = data.documentInfo.version || '';
+                        document.getElementById('effectiveDate').value = data.documentInfo.effectiveDate || '';
+                        document.getElementById('hardCopy').checked = data.documentInfo.hardCopy || false;
+                        document.getElementById('softCopy').checked = data.documentInfo.softCopy || false;
+                        document.getElementById('edms').checked = data.documentInfo.edms || false;
+                        document.getElementById('other').checked = data.documentInfo.other || false;
+                    }
+                    
+                    // Load participant data
+                    if (data.participants) {
+                        participantData = data.participants;
+                        loadParticipantData();
+                    }
+                    
+                    updateStatus('online', '✅ โหลดข้อมูลสำเร็จ');
+                } else {
+                    // No document exists, set defaults
+                    setDefaultValues();
+                    updateStatus('warning', '⚠️ สร้างเอกสารใหม่');
+                }
+            } catch (error) {
+                console.error('Error loading from Firebase:', error);
+                updateStatus('offline', '❌ โหลดจาก Firebase ไม่สำเร็จ');
+                loadFromLocalStorage();
+            }
+        }
+
+        function loadFromLocalStorage() {
+            try {
+                const savedData = localStorage.getItem('meetingAttendanceBackup');
+                if (savedData) {
+                    const data = JSON.parse(savedData);
+                    
+                    // Load document info
+                    if (data.documentInfo) {
+                        document.getElementById('requestDate').value = data.documentInfo.requestDate || '';
+                        document.getElementById('dueDate').value = data.documentInfo.dueDate || '';
+                        document.getElementById('documentName').value = data.documentInfo.documentName || '';
+                        document.getElementById('documentType').value = data.documentInfo.documentType || 'internal';
+                        document.getElementById('documentNumber').value = data.documentInfo.documentNumber || '';
+                        document.getElementById('version').value = data.documentInfo.version || '';
+                        document.getElementById('effectiveDate').value = data.documentInfo.effectiveDate || '';
+                        document.getElementById('hardCopy').checked = data.documentInfo.hardCopy || false;
+                        document.getElementById('softCopy').checked = data.documentInfo.softCopy || false;
+                        document.getElementById('edms').checked = data.documentInfo.edms || false;
+                        document.getElementById('other').checked = data.documentInfo.other || false;
+                    }
+                    
+                    // Load participant data
+                    if (data.participants) {
+                        participantData = data.participants;
+                        loadParticipantData();
+                    }
+                    
+                    updateStatus('warning', '📱 โหลดจาก Local Storage');
+                } else {
+                    setDefaultValues();
+                    updateStatus('warning', '📝 สร้างข้อมูลเริ่มต้น');
+                }
+            } catch (error) {
+                console.error('Error loading from localStorage:', error);
+                setDefaultValues();
+                updateStatus('offline', '❌ โหลดข้อมูลไม่สำเร็จ');
+            }
+        }
+
+        function loadParticipantData() {
+            Object.keys(participantData).forEach(index => {
+                const data = participantData[index];
+                const row = document.querySelector(`#participantsList .participant-row:nth-child(${parseInt(index) + 1})`);
+                
+                if (row && data) {
+                    // Load method selection
+                    if (data.method) {
+                        const methodSelect = row.querySelector('select');
+                        if (methodSelect) methodSelect.value = data.method;
+                    }
+                    
+                    // Load date
+                    if (data.date) {
+                        const dateInput = row.querySelector('input[type="date"]');
+                        if (dateInput) dateInput.value = data.date;
+                    }
+                    
+                    // Load signature
+                    if (data.signature) {
+                        const canvas = document.getElementById(`canvas-${index}`);
+                        if (canvas) {
+                            const ctx = canvas.getContext('2d');
+                            const img = new Image();
+                            img.onload = function() {
+                                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                ctx.drawImage(img, 0, 0);
+                            };
+                            img.src = data.signature;
+                        }
+                    }
+                }
+            });
+        }
+
+        function setDefaultValues() {
+            document.getElementById('documentName').value = 'รายงานการประชุม MU Monthly ประจาเดือนกุมภาพันธ์';
+            document.getElementById('documentNumber').value = 'ALL-SQP-FM-041';
+            document.getElementById('version').value = 'E';
+            document.getElementById('effectiveDate').value = '2022-09-15';
+            document.getElementById('hardCopy').checked = true;
+            document.getElementById('softCopy').checked = true;
+        }
+
+        // Auto-save function
+        async function autoSave() {
+            if (isFirebaseInitialized) {
+                await saveToFirebase();
+            }
+        }
+
+        // Auto-save every 30 seconds
+        setInterval(autoSave, 30000);
+
+        // Password modal functions
+        function showPasswordModal() {
+            if (isAdminMode) {
+                toggleAdminMode();
+            } else {
+                document.getElementById('passwordModal').style.display = 'block';
+                document.getElementById('adminPassword').focus();
+                document.getElementById('errorMessage').style.display = 'none';
+            }
+        }
+
+        function closePasswordModal() {
+            document.getElementById('passwordModal').style.display = 'none';
+            document.getElementById('adminPassword').value = '';
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        function checkPassword() {
+            const password = document.getElementById('adminPassword').value;
+            const errorMessage = document.getElementById('errorMessage');
+            
+            if (password === ADMIN_PASSWORD) {
+                closePasswordModal();
+                toggleAdminMode();
+            } else {
+                errorMessage.style.display = 'block';
+                document.getElementById('adminPassword').value = '';
+                document.getElementById('adminPassword').focus();
+            }
+        }
+
+        function toggleAdminMode() {
+            isAdminMode = !isAdminMode;
+            const btn = document.querySelector('.admin-toggle');
+            const toggleText = document.getElementById('adminToggleText');
+            const adminFields = document.querySelectorAll('#requestDate, #dueDate, #documentName, #documentType, #documentNumber, #version, #effectiveDate, #hardCopy, #softCopy, #edms, #other');
+            
+            if (isAdminMode) {
+                toggleText.textContent = '🔒 Admin Mode';
+                btn.classList.add('admin-mode');
+                adminFields.forEach(field => field.disabled = false);
+                updateStatus('warning', '👨‍💼 Admin Mode เปิดใช้งาน');
+            } else {
+                toggleText.textContent = '🔓 User Mode';
+                btn.classList.remove('admin-mode');
+                adminFields.forEach(field => field.disabled = true);
+                updateStatus('online', '👤 User Mode เปิดใช้งาน');
+            }
+        }
+
+        function setToday(fieldId) {
+            if (isAdminMode) {
+                const today = new Date().toISOString().split('T')[0];
+                document.getElementById(fieldId).value = today;
+                // Auto-save after setting date
+                setTimeout(autoSave, 1000);
+            }
+        }
+
+        function toggleCheckbox(checkboxId) {
+            if (isAdminMode) {
+                const checkbox = document.getElementById(checkboxId);
+                checkbox.checked = !checkbox.checked;
+                setTimeout(autoSave, 1000);
+            }
+        }
+
+        // Participant management
+        function createParticipantRow(name, index) {
+            const row = document.createElement('div');
+            row.className = 'participant-row';
+            row.innerHTML = `
+                <div class="participant-index">${index + 1}</div>
+                <div class="participant-name">${name}</div>
+                <div>
+                    <select class="participant-input" onchange="updateParticipant(${index}, 'method', this.value)">
+                        <option value="">เลือก...</option>
+                        <option value="Hard Copy">📄 Hard Copy</option>
+                        <option value="Soft Copy">💾 Soft Copy</option>
+                        <option value="EDMS">🌐 EDMS</option>
+                        <option value="อื่น ๆ">📋 อื่น ๆ</option>
+                    </select>
+                </div>
+                <div class="signature-container">
+                    <canvas class="signature-canvas" id="canvas-${index}" width="150" height="60"></canvas>
+                    <button class="btn btn-danger btn-small" onclick="clearSignature(${index})">ล้าง</button>
+                </div>
+                <div>
+                    <input type="date" class="participant-input" onchange="updateParticipant(${index}, 'date', this.value)">
+                </div>
+                <div>
+                    <button class="btn btn-warning btn-small" onclick="clearParticipant(${index})">ล้างทั้งหมด</button>
+                </div>
+            `;
+            return row;
+        }
+
+        function initializeParticipants() {
+            const container = document.getElementById('participantsList');
+            container.innerHTML = '';
+            
+            participants.forEach((name, index) => {
+                const row = createParticipantRow(name, index);
+                container.appendChild(row);
+                
+                // Initialize signature canvas
+                const canvas = document.getElementById(`canvas-${index}`);
+                const ctx = canvas.getContext('2d');
+                let isDrawing = false;
+                
+                // Mouse events
+                canvas.addEventListener('mousedown', (e) => {
+                    isDrawing = true;
+                    const rect = canvas.getBoundingClientRect();
+                    ctx.beginPath();
+                    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+                    ctx.lineWidth = 2;
+                    ctx.lineCap = 'round';
+                    ctx.strokeStyle = '#2d3748';
+                });
+                
+                canvas.addEventListener('mousemove', (e) => {
+                    if (!isDrawing) return;
+                    const rect = canvas.getBoundingClientRect();
+                    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+                    ctx.stroke();
+                });
+                
+                canvas.addEventListener('mouseup', () => {
+                    isDrawing = false;
+                    updateParticipant(index, 'signature', canvas.toDataURL());
+                });
+                
+                // Touch events for mobile
+                canvas.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    isDrawing = true;
+                    const rect = canvas.getBoundingClientRect();
+                    const touch = e.touches[0];
+                    ctx.beginPath();
+                    ctx.moveTo(touch.clientX - rect.left, touch.clientY - rect.top);
+                    ctx.lineWidth = 2;
+                    ctx.lineCap = 'round';
+                    ctx.strokeStyle = '#2d3748';
+                });
+                
+                canvas.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    if (!isDrawing) return;
+                    const rect = canvas.getBoundingClientRect();
+                    const touch = e.touches[0];
+                    ctx.lineTo(touch.clientX - rect.left, touch.clientY - rect.top);
+                    ctx.stroke();
+                });
+                
+                canvas.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    isDrawing = false;
+                    updateParticipant(index, 'signature', canvas.toDataURL());
+                });
+            });
+        }
+
+        function updateParticipant(index, field, value) {
+            if (!participantData[index]) {
+                participantData[index] = {};
+            }
+            participantData[index][field] = value;
+            
+            // Auto-save when participant data changes
+            setTimeout(autoSave, 2000);
+        }
+
+        function clearSignature(index) {
+            const canvas = document.getElementById(`canvas-${index}`);
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            updateParticipant(index, 'signature', '');
+        }
+
+        function clearParticipant(index) {
+            clearSignature(index);
+            const row = document.querySelector(`#participantsList .participant-row:nth-child(${index + 1})`);
+            const inputs = row.querySelectorAll('input, select');
+            inputs.forEach(input => input.value = '');
+            delete participantData[index];
+            autoSave();
+        }
+
+        // PDF Export
+        function exportToPDF() {
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                // Header
+                doc.setFontSize(18);
+                doc.text('ใบรับทราบเนื้อหาเอกสาร', 105, 20, { align: 'center' });
+                doc.setFontSize(14);
+                doc.text('Document Acknowledgement and Implementation', 105, 30, { align: 'center' });
+                
+                // Document info section
+                doc.setFontSize(12);
+                let y = 50;
+                doc.setFont(undefined, 'bold');
+                doc.text('ข้อมูลเอกสาร', 20, y);
+                doc.setFont(undefined, 'normal');
+                
+                y += 10;
+                doc.text(`วันที่ขอดำเนินการ: ${document.getElementById('requestDate').value || '-'}`, 20, y);
+                doc.text(`กำหนดเสร็จ: ${document.getElementById('dueDate').value || '-'}`, 120, y);
+                
+                y += 8;
+                const docName = document.getElementById('documentName').value || '-';
+                doc.text(`ชื่อเอกสาร: ${docName.length > 50 ? docName.substring(0, 50) + '...' : docName}`, 20, y);
+                
+                y += 8;
+                doc.text(`หมายเลขเอกสาร: ${document.getElementById('documentNumber').value || '-'}`, 20, y);
+                doc.text(`ฉบับที่: ${document.getElementById('version').value || '-'}`, 120, y);
+                
+                y += 8;
+                doc.text(`วันที่มีผลบังคับใช้: ${document.getElementById('effectiveDate').value || '-'}`, 20, y);
+                
+                // Document format
+                y += 8;
+                const formats = [];
+                if (document.getElementById('hardCopy').checked) formats.push('Hard Copy');
+                if (document.getElementById('softCopy').checked) formats.push('Soft Copy');
+                if (document.getElementById('edms').checked) formats.push('EDMS');
+                if (document.getElementById('other').checked) formats.push('อื่น ๆ');
+                doc.text(`รูปแบบเอกสาร: ${formats.join(', ') || '-'}`, 20, y);
+                
+                // Participants table
+                y += 20;
+                doc.setFont(undefined, 'bold');
+                doc.text('รายชื่อผู้รับทราบเอกสาร', 20, y);
+                doc.setFont(undefined, 'normal');
+                
+                y += 10;
+                doc.setFontSize(10);
+                
+                // Table header
+                doc.text('ลำดับ', 20, y);
+                doc.text('ชื่อ-นามสกุล', 35, y);
+                doc.text('รับทราบผ่าน', 120, y);
+                doc.text('วันที่ลงนาม', 160, y);
+                doc.text('ลายเซ็น', 185, y);
+                
+                y += 5;
+                doc.line(20, y, 200, y); // Header line
+                y += 5;
+                
+                // Participant rows
+                participants.forEach((name, index) => {
+                    const data = participantData[index] || {};
+                    
+                    // Check if we need a new page
+                    if (y > 270) {
+                        doc.addPage();
+                        y = 20;
+                    }
+                    
+                    doc.text(`${index + 1}`, 20, y);
+                    
+                    // Handle long names
+                    const displayName = name.length > 25 ? name.substring(0, 25) + '...' : name;
+                    doc.text(displayName, 35, y);
+                    
+                    doc.text(data.method || '-', 120, y);
+                    doc.text(data.date || '-', 160, y);
+                    
+                    // Add signature if available
+                    if (data.signature) {
+                        try {
+                            doc.addImage(data.signature, 'PNG', 185, y - 3, 12, 6);
+                        } catch (e) {
+                            console.log('Error adding signature for participant', index, ':', e);
+                            doc.text('✓', 185, y);
+                        }
+                    }
+                    
+                    y += 8;
+                });
+                
+                // Footer
+                doc.setFontSize(8);
+                doc.text(`สร้างเมื่อ: ${new Date().toLocaleString('th-TH')}`, 20, doc.internal.pageSize.height - 10);
+                doc.text('ระบบเซ็นชื่อเข้าร่วมประชุม', 105, doc.internal.pageSize.height - 10, { align: 'center' });
+                
+                // Generate filename with timestamp
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                const docNumber = document.getElementById('documentNumber').value || 'document';
+                const filename = `${docNumber}_${timestamp}.pdf`;
+                
+                doc.save(filename);
+                updateStatus('online', '📄 Export PDF สำเร็จ');
+                
+            } catch (error) {
+                console.error('Error exporting PDF:', error);
+                updateStatus('offline', '❌ Export PDF ไม่สำเร็จ');
+            }
+        }
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeParticipants();
+            loadFromFirebase();
+            
+            // Modal event listeners
+            document.getElementById('adminPassword').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    checkPassword();
+                }
+            });
+            
+            document.getElementById('passwordModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closePasswordModal();
+                }
+            });
+
+            // Add event listeners for auto-save on form changes
+            const formInputs = document.querySelectorAll('#requestDate, #dueDate, #documentName, #documentType, #documentNumber, #version, #effectiveDate');
+            formInputs.forEach(input => {
+                input.addEventListener('change', () => {
+                    if (isAdminMode) {
+                        setTimeout(autoSave, 1000);
+                    }
+                });
+            });
+            
+            // Check online status
+            window.addEventListener('online', () => {
+                updateStatus('online', '🟢 เชื่อมต่ออินเทอร์เน็ต');
+                if (isFirebaseInitialized) {
+                    loadFromFirebase();
+                }
+            });
+            
+            window.addEventListener('offline', () => {
+                updateStatus('offline', '🔴 ออฟไลน์');
+            });
+        });
+    </script>
+</body>
+</html>

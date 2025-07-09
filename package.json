@@ -1,0 +1,12 @@
+{
+  "name": "meeting-attendance-system",
+  "version": "2.0.0",
+  "description": "ระบบเซ็นชื่อเข้าร่วมประชุม",
+  "main": "index.html",
+  "scripts": {
+    "dev": "npx http-server . -p 3000 -o"
+  },
+  "keywords": ["meeting", "attendance", "signature"],
+  "author": "Claude AI",
+  "license": "MIT"
+}
